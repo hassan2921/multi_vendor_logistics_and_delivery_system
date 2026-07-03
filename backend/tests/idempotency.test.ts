@@ -8,6 +8,7 @@ import express from 'express';
 import request from 'supertest';
 import { requireIdempotencyKey } from '../src/middleware/idempotency.middleware';
 import { errorHandler } from '../src/middleware/errorHandler.middleware';
+import { claimIdempotencyKey, hashRequest } from '../src/services/idempotency.service';
 
 function buildTestApp() {
   const app = express();
@@ -62,18 +63,10 @@ describe('idempotency middleware', () => {
     const app = buildTestApp();
     const key = 'idem-key-3';
 
-    // First request claims the key but its handler never resolves before
-    // the second request checks, simulating a genuine in-flight duplicate.
-    const slowApp = express();
-    slowApp.use(express.json());
-    slowApp.post('/widgets', requireIdempotencyKey(), () => {
-      // never respond — leaves the key permanently in 'processing'
-    });
-    slowApp.use(errorHandler);
-
-    request(slowApp).post('/widgets').set('Idempotency-Key', key).send({ name: 'a' });
-    // give the first request a moment to claim the key
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Simulate a genuine in-flight duplicate: claim the key directly (as
+    // the first request's middleware would) without ever completing it,
+    // then send a second request with the same key.
+    await claimIdempotencyKey(key, hashRequest('POST', '/widgets', { name: 'a' }));
 
     const res = await request(app).post('/widgets').set('Idempotency-Key', key).send({ name: 'a' });
     expect(res.status).toBe(409);

@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment secrets (never commit real keys — see .env.example)
+.env
+backend/.env
+
+# Node backend
+backend/node_modules/
+backend/dist/
