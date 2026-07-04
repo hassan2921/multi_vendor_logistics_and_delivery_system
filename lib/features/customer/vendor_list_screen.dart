@@ -5,6 +5,7 @@ import '../../auth/auth_provider.dart';
 import '../../core/supabase_client.dart';
 import '../../data/models/vendor.dart';
 import 'order_cart_screen.dart';
+import 'order_history_screen.dart';
 
 final vendorsListProvider = FutureProvider((ref) => ref.watch(vendorsRepositoryProvider).listVendors());
 
@@ -19,6 +20,13 @@ class VendorListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Vendors near you'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'My orders',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const OrderHistoryScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => supabase.auth.signOut(),

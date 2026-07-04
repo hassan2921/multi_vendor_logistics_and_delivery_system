@@ -30,10 +30,19 @@ export interface Vendor {
   is_active: boolean;
 }
 
-export interface OrderItemInput {
+export interface Product {
+  id: string;
+  vendor_id: string;
   name: string;
+  description: string | null;
+  price_cents: number;
+  is_available: boolean;
+}
+
+/** What the client sends: a reference to a catalog product, never a price. */
+export interface OrderItemSelection {
+  productId: string;
   quantity: number;
-  unit_price_cents: number;
 }
 
 export interface Order {
@@ -53,6 +62,7 @@ export interface Payment {
   id: string;
   order_id: string;
   stripe_payment_intent_id: string | null;
+  stripe_refund_id: string | null;
   status: string;
   amount_cents: number;
 }

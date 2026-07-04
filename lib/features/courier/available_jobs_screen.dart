@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/auth_provider.dart';
 import '../../core/supabase_client.dart';
 import 'active_delivery_screen.dart';
+import 'delivery_history_screen.dart';
 
 final availableJobsProvider = FutureProvider((ref) => ref.watch(ordersRepositoryProvider).listAvailableJobs());
 
@@ -18,6 +19,13 @@ class AvailableJobsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Available deliveries'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'My deliveries',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DeliveryHistoryScreen()),
+            ),
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: () => ref.invalidate(availableJobsProvider)),
           IconButton(icon: const Icon(Icons.logout), onPressed: () => supabase.auth.signOut()),
         ],

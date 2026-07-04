@@ -13,6 +13,9 @@ ordersRouter.post(
   asyncHandler(ordersController.createOrder)
 );
 
+// Must come before /:id so "mine" isn't parsed as an order id.
+ordersRouter.get('/mine', requireAuth(), asyncHandler(ordersController.listMine));
+
 ordersRouter.get('/:id', requireAuth(), asyncHandler(ordersController.getOrder));
 
 ordersRouter.patch(
@@ -27,4 +30,11 @@ ordersRouter.post(
   requireAuth(),
   requireRole('courier'),
   asyncHandler(ordersController.claimDelivery)
+);
+
+ordersRouter.post(
+  '/:id/cancel',
+  requireAuth(),
+  requireRole('customer', 'vendor'),
+  asyncHandler(ordersController.cancelOrder)
 );

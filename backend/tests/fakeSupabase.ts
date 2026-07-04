@@ -9,12 +9,15 @@ type Row = Record<string, unknown>;
 const UNIQUE_COLUMNS: Record<string, string[]> = {
   idempotency_keys: ['key'],
   stripe_events_seen: ['event_id'],
+  vendors: ['owner_user_id'],
 };
 
 class FakeQueryBuilder {
   private op: 'select' | 'insert' | 'update' | 'delete' | null = null;
   private payload: Row | Row[] | null = null;
   private filters: { col: string; val: unknown; matcher: (rowVal: unknown, val: unknown) => boolean }[] = [];
+  private orderBy: { col: string; ascending: boolean } | null = null;
+  private limitCount: number | null = null;
 
   constructor(private table: string, private store: Map<string, Row[]>) {}
 
@@ -46,7 +49,24 @@ class FakeQueryBuilder {
   }
 
   is(col: string, val: unknown) {
-    this.filters.push({ col, val, matcher: (rowVal, v) => rowVal === v });
+    // Postgres treats a column that was never set as NULL, so undefined
+    // must match `is(col, null)` here too.
+    this.filters.push({ col, val, matcher: (rowVal, v) => (rowVal ?? null) === v });
+    return this;
+  }
+
+  in(col: string, vals: unknown[]) {
+    this.filters.push({ col, val: vals, matcher: (rowVal, v) => (v as unknown[]).includes(rowVal) });
+    return this;
+  }
+
+  order(col: string, opts?: { ascending?: boolean }) {
+    this.orderBy = { col, ascending: opts?.ascending ?? true };
+    return this;
+  }
+
+  limit(count: number) {
+    this.limitCount = count;
     return this;
   }
 
@@ -62,7 +82,21 @@ class FakeQueryBuilder {
     const rows = this.rows();
 
     if (this.op === 'select') {
-      return { data: rows.filter((r) => this.matches(r)), error: null };
+      let result = rows.filter((r) => this.matches(r));
+      if (this.orderBy) {
+        const { col, ascending } = this.orderBy;
+        result = [...result].sort((a, b) => {
+          const av = a[col] as string | number;
+          const bv = b[col] as string | number;
+          if (av === bv) return 0;
+          const cmp = av < bv ? -1 : 1;
+          return ascending ? cmp : -cmp;
+        });
+      }
+      if (this.limitCount !== null) {
+        result = result.slice(0, this.limitCount);
+      }
+      return { data: result, error: null };
     }
 
     if (this.op === 'insert') {

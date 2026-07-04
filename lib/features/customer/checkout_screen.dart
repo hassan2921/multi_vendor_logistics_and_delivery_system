@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../auth/auth_provider.dart';
 import '../../data/models/order.dart';
@@ -24,6 +25,12 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
+  // Generated once for the lifetime of this checkout screen: if the user
+  // double-taps "Pay" or retries after a network drop / cancelled payment
+  // sheet, the same key is sent again and the backend replays the original
+  // order instead of creating a duplicate.
+  final String _idempotencyKey = const Uuid().v4();
+
   bool _isProcessing = false;
   String? _error;
 
@@ -45,6 +52,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         vendorId: widget.vendor.id,
         items: widget.items,
         deliveryAddress: widget.deliveryAddress,
+        idempotencyKey: _idempotencyKey,
       );
 
       // 2. Server creates the Stripe PaymentIntent, we only ever see the

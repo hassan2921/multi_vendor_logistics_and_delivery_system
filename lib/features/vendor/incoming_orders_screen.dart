@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/auth_provider.dart';
 import '../../core/supabase_client.dart';
 import '../../data/models/order.dart';
+import 'menu_management_screen.dart';
 import 'order_detail_screen.dart';
 
 /// Realtime-subscribed: new orders and status changes for this vendor show
@@ -36,6 +37,13 @@ class IncomingOrdersScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Incoming orders'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.restaurant_menu),
+            tooltip: 'Manage menu',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MenuManagementScreen()),
+            ),
+          ),
           IconButton(icon: const Icon(Icons.logout), onPressed: () => supabase.auth.signOut()),
         ],
       ),

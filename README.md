@@ -19,6 +19,16 @@ Realtime + Auth) for data and live sync. Stripe (test mode) handles payments.
    uses a Postgres unique-constraint insert as a lock keyed by an
    `Idempotency-Key` header, replaying the cached response for a repeated key
    instead of creating a duplicate order.
+4. **Server-side pricing from the product catalog** — [`backend/src/services/orders.service.ts`](backend/src/services/orders.service.ts)
+   prices every order from the vendor's `products` table by id; the client only
+   ever sends `{productId, quantity}`, so a tampered client can't discount its
+   own order. Also validates the product belongs to the selected vendor and is
+   currently available.
+5. **Cancellation with automatic refund** — [`backend/src/services/orders.service.ts`](backend/src/services/orders.service.ts)
+   enforces who can cancel (the owning customer or vendor) and which statuses
+   are still cancellable; the controller then calls
+   [`stripeService.refundIfPaid`](backend/src/services/stripe.service.ts), which
+   is a no-op unless the order actually had a captured payment.
 
 ## Repository layout
 
@@ -36,9 +46,10 @@ required.
 ### 1. Supabase
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
+2. Run, in order, [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql),
+   [`supabase/migrations/0002_products_and_refunds.sql`](supabase/migrations/0002_products_and_refunds.sql),
    then [`supabase/policies.sql`](supabase/policies.sql) in the SQL editor.
-3. Copy your Project URL, anon key, service role key, and JWT secret from
+3. Copy your Project URL, anon key, and service role key from
    *Project Settings > API*.
 
 ### 2. Stripe
@@ -84,22 +95,27 @@ courier throttling logic is unit-tested with a fake position stream.
 
 1. Register a vendor account, then a courier account, then a customer
    account (role picker is on the register screen).
-2. As the vendor: no setup screen exists yet for creating a `vendors` row —
-   insert one directly in the Supabase table editor with `owner_user_id` set
-   to your vendor user's `id`, so it shows up in the customer's vendor list.
-3. As the customer: pick the vendor, add a few line items, checkout, and pay
-   with Stripe's test card `4242 4242 4242 4242`, any future expiry, any CVC.
-4. The Stripe webhook marks the order `paid`; use the Supabase table editor
-   (or a future vendor "accept" flow extension) to move it through
+2. As the vendor: you'll land on a storefront setup screen first time in —
+   fill in a name and (optionally) an address, then use the menu icon in the
+   app bar to add a few menu items with prices.
+3. As the customer: pick the vendor, adjust quantities on their menu items,
+   enter a delivery address, checkout, and pay with Stripe's test card
+   `4242 4242 4242 4242`, any future expiry, any CVC.
+4. The Stripe webhook marks the order `paid`; as the vendor, tap into the
+   order from *Incoming orders* and advance it through
    `accepted → preparing → ready_for_pickup`.
 5. As the courier: claim the job, start sharing location, and watch the
    customer's tracking screen update live. Use the Android emulator's
    Extended Controls > Location > Route playback to simulate movement
    without a real device.
+6. Try cancellation: as the customer, open *My orders* (receipt icon on the
+   vendor list screen) and cancel an order that's still `paid`/`accepted`/
+   `preparing` — if it was already paid, the backend issues a real Stripe
+   test-mode refund automatically.
 
 ## Known limitations (by design, for a portfolio-scoped build)
 
 - Push notifications are Realtime-driven local notifications only — no true
   background push (documented trade-off from dropping Firebase/FCM).
 - RLS policies are simplified, not production-hardened multi-tenant rules.
-- No vendor onboarding UI yet (vendor rows are created directly in Supabase).
+- No ratings/reviews, delivery ETA, or courier-proximity job sorting yet.

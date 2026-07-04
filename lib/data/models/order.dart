@@ -68,17 +68,32 @@ extension OrderStatusJson on OrderStatus {
   }
 }
 
+/// A cart line. [name]/[unitPriceCents] are only for local display — the
+/// wire format sends just [productId]/[quantity], since the backend prices
+/// every order from its own product catalog rather than trusting the client.
 class OrderItem {
+  final String productId;
   final String name;
   final int quantity;
   final int unitPriceCents;
 
-  const OrderItem({required this.name, required this.quantity, required this.unitPriceCents});
+  const OrderItem({
+    required this.productId,
+    required this.name,
+    required this.quantity,
+    required this.unitPriceCents,
+  });
+
+  OrderItem withQuantity(int quantity) => OrderItem(
+        productId: productId,
+        name: name,
+        quantity: quantity,
+        unitPriceCents: unitPriceCents,
+      );
 
   Map<String, dynamic> toJson() => {
-        'name': name,
+        'productId': productId,
         'quantity': quantity,
-        'unit_price_cents': unitPriceCents,
       };
 }
 
@@ -93,6 +108,7 @@ class DeliveryOrder {
   final String? deliveryAddress;
   final double? deliveryLat;
   final double? deliveryLng;
+  final DateTime? createdAt;
 
   const DeliveryOrder({
     required this.id,
@@ -105,7 +121,15 @@ class DeliveryOrder {
     this.deliveryAddress,
     this.deliveryLat,
     this.deliveryLng,
+    this.createdAt,
   });
+
+  bool get isCancellableByCustomer => const {
+        OrderStatus.pendingPayment,
+        OrderStatus.paid,
+        OrderStatus.accepted,
+        OrderStatus.preparing,
+      }.contains(status);
 
   factory DeliveryOrder.fromJson(Map<String, dynamic> json) => DeliveryOrder(
         id: json['id'] as String,
@@ -118,5 +142,6 @@ class DeliveryOrder {
         deliveryAddress: json['delivery_address'] as String?,
         deliveryLat: (json['delivery_lat'] as num?)?.toDouble(),
         deliveryLng: (json['delivery_lng'] as num?)?.toDouble(),
+        createdAt: json['created_at'] == null ? null : DateTime.parse(json['created_at'] as String),
       );
 }

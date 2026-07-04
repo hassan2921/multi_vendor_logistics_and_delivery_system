@@ -59,6 +59,52 @@ describe('idempotency middleware', () => {
     expect(res.status).toBe(422);
   });
 
+  it('distinguishes payloads that differ only inside nested arrays/objects', () => {
+    const a = hashRequest('POST', '/orders', {
+      vendorId: 'v1',
+      items: [{ name: 'Widget', quantity: 1, unit_price_cents: 100 }],
+    });
+    const b = hashRequest('POST', '/orders', {
+      vendorId: 'v1',
+      items: [{ name: 'Gadget', quantity: 2, unit_price_cents: 999 }],
+    });
+
+    expect(a).not.toBe(b);
+  });
+
+  it('hashes identically regardless of key order', () => {
+    const a = hashRequest('POST', '/orders', { vendorId: 'v1', items: [{ name: 'W', quantity: 1 }] });
+    const b = hashRequest('POST', '/orders', { items: [{ quantity: 1, name: 'W' }], vendorId: 'v1' });
+
+    expect(a).toBe(b);
+  });
+
+  it('releases the key on a failed request so the same key can be retried', async () => {
+    const app = express();
+    app.use(express.json());
+
+    let attempt = 0;
+    app.post('/widgets', requireIdempotencyKey(), (req, res, next) => {
+      attempt += 1;
+      if (attempt === 1) {
+        return next(new Error('transient failure'));
+      }
+      res.status(201).json({ attempt });
+    });
+    app.use(errorHandler);
+
+    const key = 'idem-key-retry';
+    const first = await request(app).post('/widgets').set('Idempotency-Key', key).send({ name: 'a' });
+    expect(first.status).toBe(500);
+
+    // settle (release) is fired asynchronously from the res.json wrapper
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const second = await request(app).post('/widgets').set('Idempotency-Key', key).send({ name: 'a' });
+    expect(second.status).toBe(201);
+    expect(second.body.attempt).toBe(2);
+  });
+
   it('returns 409 for a concurrent duplicate request using the same key', async () => {
     const app = buildTestApp();
     const key = 'idem-key-3';

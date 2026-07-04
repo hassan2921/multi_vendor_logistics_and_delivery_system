@@ -5,6 +5,8 @@ import '../data/models/user_role.dart';
 import '../features/courier/available_jobs_screen.dart';
 import '../features/customer/vendor_list_screen.dart';
 import '../features/vendor/incoming_orders_screen.dart';
+import '../features/vendor/vendor_onboarding_screen.dart';
+import '../features/vendor/vendor_state_provider.dart';
 import 'auth_provider.dart';
 import 'login_screen.dart';
 
@@ -29,9 +31,25 @@ class AuthGate extends ConsumerWidget {
           case UserRole.courier:
             return const AvailableJobsScreen();
           case UserRole.vendor:
-            return const IncomingOrdersScreen();
+            return const _VendorGate();
         }
       },
+    );
+  }
+}
+
+/// Vendor users must onboard a storefront before they see the dashboard.
+class _VendorGate extends ConsumerWidget {
+  const _VendorGate();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vendorAsync = ref.watch(myVendorProvider);
+
+    return vendorAsync.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (err, _) => Scaffold(body: Center(child: Text('Something went wrong: $err'))),
+      data: (vendor) => vendor == null ? const VendorOnboardingScreen() : const IncomingOrdersScreen(),
     );
   }
 }

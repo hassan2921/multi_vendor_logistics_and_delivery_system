@@ -50,6 +50,21 @@ class OrdersRepository {
     return (res['jobs'] as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
+  /// Role-agnostic history: the backend resolves what "mine" means from the
+  /// caller's app role (customer's own orders, courier's claimed
+  /// deliveries, or the signed-in vendor's storefront orders).
+  Future<List<DeliveryOrder>> listMine() async {
+    final res = await _api.get('/orders/mine');
+    return (res['orders'] as List<dynamic>)
+        .map((o) => DeliveryOrder.fromJson(o as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<DeliveryOrder> cancelOrder(String orderId) async {
+    final res = await _api.post('/orders/$orderId/cancel', {});
+    return DeliveryOrder.fromJson(res['order'] as Map<String, dynamic>);
+  }
+
   /// Reads and live updates go straight to Supabase — RLS scopes what each
   /// role can see, and Realtime pushes status changes without polling.
   Stream<DeliveryOrder?> watchOrder(String orderId) {

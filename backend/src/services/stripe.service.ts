@@ -37,6 +37,33 @@ export async function createPaymentIntent(orderId: string): Promise<{ clientSecr
   return { clientSecret: paymentIntent.client_secret };
 }
 
+/**
+ * Refunds the order's payment via Stripe if (and only if) it was actually
+ * captured. Safe to call after any cancellation, whether or not the order
+ * was ever paid — a no-op for orders still in pending_payment.
+ */
+export async function refundIfPaid(orderId: string): Promise<void> {
+  const { data: payment, error } = await supabaseAdmin
+    .from('payments')
+    .select('*')
+    .eq('order_id', orderId)
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+  if (!payment || payment.status !== 'succeeded' || !payment.stripe_payment_intent_id) {
+    return;
+  }
+
+  const refund = await stripe.refunds.create({ payment_intent: payment.stripe_payment_intent_id });
+
+  await supabaseAdmin
+    .from('payments')
+    .update({ status: 'refunded', stripe_refund_id: refund.id, updated_at: new Date().toISOString() })
+    .eq('order_id', orderId);
+}
+
 export function verifyWebhookSignature(rawBody: Buffer, signature: string): Stripe.Event {
   return stripe.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
 }

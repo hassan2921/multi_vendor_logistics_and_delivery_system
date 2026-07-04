@@ -18,11 +18,14 @@ class DeliveriesRepository {
   }
 
   Stream<LocationPing?> watchLatestPing(String deliveryId) {
+    // .order() on a Supabase stream defaults to DESCENDING, so the newest
+    // ping is rows.first; limit(1) keeps the payload to just that row.
     return supabase
         .from('location_pings')
         .stream(primaryKey: ['id'])
         .eq('delivery_id', deliveryId)
         .order('recorded_at')
-        .map((rows) => rows.isEmpty ? null : LocationPing.fromJson(rows.last));
+        .limit(1)
+        .map((rows) => rows.isEmpty ? null : LocationPing.fromJson(rows.first));
   }
 }

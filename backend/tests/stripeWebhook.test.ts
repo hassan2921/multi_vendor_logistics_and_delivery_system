@@ -5,7 +5,7 @@ jest.mock('../src/config/supabaseClient', () => ({
 }));
 
 import Stripe from 'stripe';
-import { handleWebhookEvent, stripe, verifyWebhookSignature } from '../src/services/stripe.service';
+import { handleWebhookEvent, refundIfPaid, stripe, verifyWebhookSignature } from '../src/services/stripe.service';
 
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET as string;
 
@@ -109,5 +109,53 @@ describe('stripe webhook event handling', () => {
 
     const { data: order } = await fakeSupabase.from('orders').select('*').eq('id', 'order-2').single();
     expect(order?.status).toBe('accepted');
+  });
+});
+
+describe('refundIfPaid', () => {
+  beforeEach(() => {
+    fakeSupabase.reset();
+  });
+
+  it('issues a Stripe refund and marks the payment refunded when it was captured', async () => {
+    await fakeSupabase.from('payments').insert({
+      order_id: 'order-1',
+      stripe_payment_intent_id: 'pi_123',
+      status: 'succeeded',
+      amount_cents: 1000,
+    });
+
+    const refundSpy = jest
+      .spyOn(stripe.refunds, 'create')
+      .mockResolvedValue({ id: 're_123' } as Stripe.Refund);
+
+    await refundIfPaid('order-1');
+
+    expect(refundSpy).toHaveBeenCalledWith({ payment_intent: 'pi_123' });
+    const { data: payment } = await fakeSupabase.from('payments').select('*').eq('order_id', 'order-1').single();
+    expect(payment?.status).toBe('refunded');
+    expect(payment?.stripe_refund_id).toBe('re_123');
+
+    refundSpy.mockRestore();
+  });
+
+  it('is a no-op when the order was never actually paid', async () => {
+    await fakeSupabase.from('payments').insert({
+      order_id: 'order-2',
+      stripe_payment_intent_id: 'pi_456',
+      status: 'requires_payment_method',
+      amount_cents: 1000,
+    });
+
+    const refundSpy = jest.spyOn(stripe.refunds, 'create');
+
+    await refundIfPaid('order-2');
+
+    expect(refundSpy).not.toHaveBeenCalled();
+    refundSpy.mockRestore();
+  });
+
+  it('is a no-op when there is no payment record at all', async () => {
+    await expect(refundIfPaid('order-without-payment')).resolves.toBeUndefined();
   });
 });

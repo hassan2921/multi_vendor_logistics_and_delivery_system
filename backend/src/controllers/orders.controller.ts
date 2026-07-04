@@ -2,15 +2,17 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../middleware/errorHandler.middleware';
 import * as ordersService from '../services/orders.service';
+import * as stripeService from '../services/stripe.service';
+import * as vendorsService from '../services/vendors.service';
+import type { Order } from '../types/domain';
 
 const createOrderSchema = z.object({
   vendorId: z.string().uuid(),
   items: z
     .array(
       z.object({
-        name: z.string().min(1),
+        productId: z.string().uuid(),
         quantity: z.number().int().positive(),
-        unit_price_cents: z.number().int().nonnegative(),
       })
     )
     .min(1),
@@ -40,8 +42,19 @@ export async function createOrder(req: Request, res: Response) {
   res.status(201).json({ order });
 }
 
+async function assertCanViewOrder(order: Order, authUser: NonNullable<Request['authUser']>) {
+  if (authUser.role === 'customer' && order.customer_id === authUser.id) return;
+  if (authUser.role === 'courier' && order.courier_id === authUser.id) return;
+  if (authUser.role === 'vendor') {
+    const vendor = await vendorsService.getVendorByOwner(authUser.id);
+    if (vendor && vendor.id === order.vendor_id) return;
+  }
+  throw new HttpError(403, 'You do not have access to this order');
+}
+
 export async function getOrder(req: Request, res: Response) {
   const order = await ordersService.getOrderById(req.params.id);
+  await assertCanViewOrder(order, req.authUser!);
   res.json({ order });
 }
 
@@ -76,4 +89,29 @@ export async function claimDelivery(req: Request, res: Response) {
   }
   const order = await ordersService.assignCourier(req.params.id, req.authUser.id);
   res.json({ order });
+}
+
+export async function cancelOrder(req: Request, res: Response) {
+  const authUser = req.authUser!;
+  const order = await ordersService.cancelOrder(req.params.id, { id: authUser.id, role: authUser.role });
+  // Refunds only actually fire if the order had a captured payment.
+  await stripeService.refundIfPaid(order.id);
+  res.json({ order });
+}
+
+export async function listMine(req: Request, res: Response) {
+  const authUser = req.authUser!;
+
+  if (authUser.role === 'customer') {
+    return res.json({ orders: await ordersService.listOrdersForCustomer(authUser.id) });
+  }
+  if (authUser.role === 'courier') {
+    return res.json({ orders: await ordersService.listOrdersForCourier(authUser.id) });
+  }
+
+  const vendor = await vendorsService.getVendorByOwner(authUser.id);
+  if (!vendor) {
+    return res.json({ orders: [] });
+  }
+  res.json({ orders: await vendorsService.listOrdersForVendor(vendor.id) });
 }
