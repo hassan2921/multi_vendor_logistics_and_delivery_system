@@ -9,8 +9,26 @@ export type IdempotencyRecord = {
   response_body: unknown;
 };
 
+/**
+ * Deterministic stringify: sorts object keys recursively so two payloads
+ * that differ only in key order hash the same, while payloads that differ
+ * anywhere — including inside nested objects/arrays — hash differently.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export function hashRequest(method: string, path: string, body: unknown): string {
-  const normalized = JSON.stringify(body ?? {}, Object.keys(body ?? {}).sort());
+  const normalized = stableStringify(body ?? {});
   return createHash('sha256').update(`${method}:${path}:${normalized}`).digest('hex');
 }
 

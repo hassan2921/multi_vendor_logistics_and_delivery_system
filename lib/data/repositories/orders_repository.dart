@@ -9,9 +9,14 @@ class OrdersRepository {
 
   /// Writes go through the Express backend so business logic (total
   /// calculation, idempotency, role checks) stays server-side.
+  ///
+  /// [idempotencyKey] must be generated once per checkout attempt and
+  /// reused if this call is retried, so a double-tap or network retry
+  /// replays the original order instead of creating a duplicate.
   Future<DeliveryOrder> createOrder({
     required String vendorId,
     required List<OrderItem> items,
+    required String idempotencyKey,
     String? deliveryAddress,
     double? deliveryLat,
     double? deliveryLng,
@@ -25,7 +30,7 @@ class OrdersRepository {
         'deliveryLat': ?deliveryLat,
         'deliveryLng': ?deliveryLng,
       },
-      idempotent: true,
+      idempotencyKey: idempotencyKey,
     );
     return DeliveryOrder.fromJson(res['order'] as Map<String, dynamic>);
   }

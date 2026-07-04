@@ -1,8 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <application
         android:label="multi_vendor_logistics_and_delivery_system"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Swap this for a real Google Maps API key (see .env.example /
+             GOOGLE_MAPS_API_KEY) to render map tiles. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="PLACEHOLDER_GOOGLE_MAPS_API_KEY" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

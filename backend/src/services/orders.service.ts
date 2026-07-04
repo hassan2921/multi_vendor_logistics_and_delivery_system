@@ -92,17 +92,33 @@ export async function updateOrderStatus(orderId: string, nextStatus: OrderStatus
 }
 
 export async function assignCourier(orderId: string, courierId: string): Promise<Order> {
-  const order = await updateOrderStatus(orderId, 'courier_assigned');
-
-  await supabaseAdmin
+  // Conditional update doubles as the lock: two couriers racing to claim
+  // the same order can't both match status='ready_for_pickup' AND
+  // courier_id IS NULL — exactly one update wins, the other gets 0 rows.
+  const { data, error } = await supabaseAdmin
     .from('orders')
-    .update({ courier_id: courierId })
-    .eq('id', orderId);
+    .update({
+      courier_id: courierId,
+      status: 'courier_assigned',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', orderId)
+    .eq('status', 'ready_for_pickup')
+    .is('courier_id', null)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(400, error.message);
+  }
+  if (!data) {
+    throw new HttpError(409, 'Order is no longer available to claim');
+  }
 
   await supabaseAdmin
     .from('deliveries')
     .update({ courier_id: courierId, status: 'assigned', assigned_at: new Date().toISOString() })
     .eq('order_id', orderId);
 
-  return { ...order, courier_id: courierId };
+  return data as Order;
 }

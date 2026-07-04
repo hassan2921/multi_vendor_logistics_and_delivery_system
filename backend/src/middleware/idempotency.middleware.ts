@@ -41,18 +41,19 @@ export function requireIdempotencyKey() {
       return res.status(409).json({ error: 'A request with this Idempotency-Key is already in progress' });
     }
 
-    // Intercept res.json so we can cache the response and mark this key completed.
+    // Intercept res.json: cache successful responses for replay, but
+    // release the key on error responses so the client can retry a
+    // legitimately-failed request with the same key. This also covers
+    // controller exceptions — the errorHandler's res.json goes through
+    // this same wrapper.
     const originalJson = res.json.bind(res);
     res.json = ((body: unknown) => {
-      completeIdempotencyKey(key, res.statusCode, body).catch((err) =>
-        console.error('Failed to persist idempotency response', err)
-      );
+      const settle = res.statusCode < 400
+        ? completeIdempotencyKey(key, res.statusCode, body)
+        : releaseIdempotencyKey(key);
+      settle.catch((err) => console.error('Failed to settle idempotency key', err));
       return originalJson(body);
     }) as typeof res.json;
-
-    res.on('error', () => {
-      releaseIdempotencyKey(key).catch((err) => console.error('Failed to release idempotency key', err));
-    });
 
     next();
   };

@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:uuid/uuid.dart';
 
 import 'config/env.dart';
 import 'supabase_client.dart';
@@ -14,12 +13,13 @@ class ApiClient {
 
   Uri _uri(String path) => Uri.parse('${Env.apiBaseUrl}$path');
 
-  Map<String, String> _headers({bool withIdempotencyKey = false}) {
+  Map<String, String> _headers({String? idempotencyKey}) {
     final token = supabase.auth.currentSession?.accessToken;
+    final bearer = token == null ? null : 'Bearer $token';
     return {
       'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-      if (withIdempotencyKey) 'Idempotency-Key': const Uuid().v4(),
+      'Authorization': ?bearer,
+      'Idempotency-Key': ?idempotencyKey,
     };
   }
 
@@ -28,18 +28,19 @@ class ApiClient {
     return _decode(res);
   }
 
-  /// [idempotent] must be true for any request that creates a
-  /// side-effecting resource (orders, payment intents) so double-taps or
-  /// client retries can't create duplicates — see backend's
-  /// idempotency.middleware.ts for the server-side half of this contract.
+  /// [idempotencyKey] is required for any request that creates a
+  /// side-effecting resource (orders, payment intents). The caller must
+  /// generate the key ONCE per logical operation and reuse it across
+  /// retries — a fresh key per attempt would defeat the dedup entirely.
+  /// See backend's idempotency.middleware.ts for the server-side half.
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body, {
-    bool idempotent = false,
+    String? idempotencyKey,
   }) async {
     final res = await http.post(
       _uri(path),
-      headers: _headers(withIdempotencyKey: idempotent),
+      headers: _headers(idempotencyKey: idempotencyKey),
       body: jsonEncode(body),
     );
     return _decode(res);

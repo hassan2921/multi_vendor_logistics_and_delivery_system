@@ -62,6 +62,18 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
     return;
   }
 
+  try {
+    await applyEvent(event);
+  } catch (err) {
+    // Roll back the seen-marker so Stripe's automatic retry of this event
+    // isn't skipped — otherwise a transient DB failure here would leave the
+    // order permanently unpaid.
+    await supabaseAdmin.from('stripe_events_seen').delete().eq('event_id', event.id);
+    throw err;
+  }
+}
+
+async function applyEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const intent = event.data.object as Stripe.PaymentIntent;
