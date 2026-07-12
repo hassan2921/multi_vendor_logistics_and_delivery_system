@@ -13,7 +13,10 @@ export async function createIntent(req: Request, res: Response) {
     throw new HttpError(400, parsed.error.issues.map((i) => i.message).join(', '));
   }
 
-  const { clientSecret } = await stripeService.createPaymentIntent(parsed.data.orderId);
+  if (req.authUser?.role !== 'customer') {
+    throw new HttpError(403, 'Only customers can pay for orders');
+  }
+  const { clientSecret } = await stripeService.createPaymentIntent(parsed.data.orderId, req.authUser.id);
   res.status(201).json({ clientSecret });
 }
 

@@ -1,4 +1,4 @@
-enum UserRole { customer, courier, vendor }
+enum UserRole { customer, courier, vendor, admin }
 
 extension UserRoleJson on UserRole {
   String get wireValue => name;

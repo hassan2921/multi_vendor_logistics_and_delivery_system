@@ -6,9 +6,15 @@ import * as ordersService from './orders.service';
 
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY);
 
-export async function createPaymentIntent(orderId: string): Promise<{ clientSecret: string }> {
+export async function createPaymentIntent(
+  orderId: string,
+  requestingCustomerId: string
+): Promise<{ clientSecret: string }> {
   const order = await ordersService.getOrderById(orderId);
 
+  if (order.customer_id !== requestingCustomerId) {
+    throw new HttpError(403, 'You can only pay for your own orders');
+  }
   if (order.status !== 'pending_payment') {
     throw new HttpError(422, `Order is not awaiting payment (status: ${order.status})`);
   }

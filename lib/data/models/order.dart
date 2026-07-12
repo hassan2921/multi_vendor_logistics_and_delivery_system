@@ -104,6 +104,12 @@ class DeliveryOrder {
   final String? courierId;
   final OrderStatus status;
   final int totalCents;
+  final int? subtotalCents;
+  final int deliveryFeeCents;
+  final int tipCents;
+  final int discountCents;
+  final String? promoCode;
+  final int? etaMinutes;
   final String currency;
   final String? deliveryAddress;
   final double? deliveryLat;
@@ -117,6 +123,12 @@ class DeliveryOrder {
     required this.status,
     required this.totalCents,
     required this.currency,
+    this.subtotalCents,
+    this.deliveryFeeCents = 0,
+    this.tipCents = 0,
+    this.discountCents = 0,
+    this.promoCode,
+    this.etaMinutes,
     this.courierId,
     this.deliveryAddress,
     this.deliveryLat,
@@ -138,6 +150,12 @@ class DeliveryOrder {
         courierId: json['courier_id'] as String?,
         status: OrderStatusJson.fromWire(json['status'] as String),
         totalCents: json['total_cents'] as int,
+        subtotalCents: json['subtotal_cents'] as int?,
+        deliveryFeeCents: json['delivery_fee_cents'] as int? ?? 0,
+        tipCents: json['tip_cents'] as int? ?? 0,
+        discountCents: json['discount_cents'] as int? ?? 0,
+        promoCode: json['promo_code'] as String?,
+        etaMinutes: json['eta_minutes'] as int?,
         currency: json['currency'] as String? ?? 'usd',
         deliveryAddress: json['delivery_address'] as String?,
         deliveryLat: (json['delivery_lat'] as num?)?.toDouble(),

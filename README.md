@@ -29,6 +29,30 @@ Realtime + Auth) for data and live sync. Stripe (test mode) handles payments.
    are still cancellable; the controller then calls
    [`stripeService.refundIfPaid`](backend/src/services/stripe.service.ts), which
    is a no-op unless the order actually had a captured payment.
+6. **Server-side pricing engine with a binding quote** — [`backend/src/services/pricing.service.ts`](backend/src/services/pricing.service.ts)
+   computes distance-based delivery fees (haversine, capped), ETA, tips, and
+   promo-code discounts; `POST /orders/quote` and order creation share one
+   code path, so the checkout preview always equals the charged total. Promo
+   redemptions are only counted when an order is actually placed.
+7. **Marketplace payouts via Stripe Connect** — [`backend/src/services/payouts.service.ts`](backend/src/services/payouts.service.ts)
+   onboards vendors onto Stripe Express accounts and, on delivery, transfers
+   the vendor's share (subtotal minus platform commission) to their account —
+   idempotently, so a retried webhook can't double-pay. Courier earnings
+   (delivery-fee share + 100% of tips) are recorded per delivery.
+8. **Auto-dispatch of the nearest courier** — [`backend/src/services/dispatch.service.ts`](backend/src/services/dispatch.service.ts)
+   ranks available couriers by distance to the pickup point (ignoring stale
+   locations and couriers mid-delivery) when an order becomes
+   `ready_for_pickup`; it reuses the same race-safe conditional-update claim
+   as manual self-claim, so the two modes can coexist.
+9. **Two-tier notifications** — [`backend/src/services/notifications.service.ts`](backend/src/services/notifications.service.ts)
+   writes every order event to a `notifications` inbox table (streamed to the
+   app over Supabase Realtime with zero external config) and additionally
+   pushes via FCM's HTTP v1 API — hand-rolled OAuth2 JWT grant, no Firebase
+   SDK dependency — when service-account credentials are configured.
+10. **Race-safe inventory** — migration [`0004`](supabase/migrations/0004_industry_features.sql)
+    adds an `adjust_stock` SQL function (single conditional `UPDATE`) so two
+    concurrent checkouts can't oversell the last unit; stock returns to the
+    shelf on cancellation.
 
 ## Repository layout
 
@@ -38,7 +62,32 @@ lib/         Flutter app (customer, courier, vendor roles)
 supabase/    SQL schema + RLS policies (shared source of truth)
 ```
 
-## Setup
+## Quick Start (Local Development)
+
+Run the entire stack locally in 3 terminals:
+
+```bash
+# Terminal 1: Start Supabase (database & auth)
+npx supabase start
+
+# Terminal 2: Start Backend API
+cd backend
+npm install && npm run dev
+
+# Terminal 3: Start Flutter app
+flutter pub get && flutter run
+```
+
+Then create test accounts via the Register screen:
+- **Customer**: customer@test.com / password123
+- **Vendor**: vendor@test.com / password123
+- **Courier**: courier@test.com / password123
+
+Test Stripe payment: `4242 4242 4242 4242`, any future expiry, any CVC.
+
+---
+
+## Full Setup (Production/Remote Supabase)
 
 Everything runs against **your own free-tier accounts** — no paid services
 required.
@@ -48,6 +97,10 @@ required.
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Run, in order, [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql),
    [`supabase/migrations/0002_products_and_refunds.sql`](supabase/migrations/0002_products_and_refunds.sql),
+   [`supabase/migrations/0003_admin_role.sql`](supabase/migrations/0003_admin_role.sql),
+   [`supabase/migrations/0004_industry_features.sql`](supabase/migrations/0004_industry_features.sql),
+   [`supabase/migrations/0005_grants.sql`](supabase/migrations/0005_grants.sql),
+   [`supabase/migrations/0006_vendor_image.sql`](supabase/migrations/0006_vendor_image.sql),
    then [`supabase/policies.sql`](supabase/policies.sql) in the SQL editor.
 3. Copy your Project URL, anon key, and service role key from
    *Project Settings > API*.
@@ -71,8 +124,34 @@ npm install
 npm run dev             # http://localhost:3000
 ```
 
-Run `npm test` to run the idempotency and Stripe-signature test suite (no
-cloud credentials required — these run against local fakes).
+Run `npm test` to run the test suite — idempotency, Stripe webhooks, orders,
+pricing/promos, dispatch, reviews, and inventory (no cloud credentials
+required — these run against local fakes).
+
+Optional env (see [`.env.example`](backend/.env.example)): delivery-fee and
+commission rates, Stripe Connect redirect URLs, and FCM service-account
+credentials for real push notifications.
+
+#### Demo data
+
+`npm run seed:demo` fills the Supabase project with a realistic demo dataset:
+8 approved vendors with 72 menu items (each with a real Unsplash photo for
+the storefront cover and every product), a month of order history (39 orders
+covering every lifecycle state, including a live in-transit order with GPS
+tracking pings), reviews with rolled-up vendor ratings, promo codes
+(`WELCOME10`, `SAVE5`, `SUMMER25`), saved addresses, and notification inboxes.
+
+It is safe to re-run: everything it creates hangs off `@demo.com` accounts,
+and it wipes that slice (and only that slice) before reseeding.
+
+Demo logins (password for all: `DemoPass123!`):
+
+| Role     | Email               | Notes                          |
+| -------- | ------------------- | ------------------------------ |
+| Customer | `customer@demo.com` | order history, saved addresses |
+| Vendor   | `vendor@demo.com`   | owns Bella Napoli Pizzeria     |
+| Courier  | `courier@demo.com`  | has an active in-transit job   |
+| Admin    | `admin@demo.com`    | full platform view             |
 
 ### 4. Flutter app
 
@@ -113,9 +192,27 @@ courier throttling logic is unit-tested with a fake position stream.
    `preparing` — if it was already paid, the backend issues a real Stripe
    test-mode refund automatically.
 
+### Beyond the basics
+
+- **Customer**: vendor search + category filters + rating sort, saved
+  addresses (address book drives distance-based fees/ETA at checkout), tips,
+  promo codes, a live checkout quote, post-delivery ratings & reviews, and a
+  realtime notification inbox (bell icon).
+- **Courier**: an availability toggle that opts into auto-dispatch (nearest
+  courier wins) and an earnings screen (delivery-fee share + tips per job).
+- **Vendor**: product categories, optional stock tracking with oversell
+  protection and one-tap restock, and a Stripe Connect payouts screen.
+- **Admin**: promote a user with
+  `update users set role = 'admin' where email = '...'` — they get a console
+  with platform metrics (GMV, fees, courier liquidity), a vendor approval
+  queue (new vendors start `pending` and are hidden until approved), a
+  platform-wide order feed, and promo-code management.
+
 ## Known limitations (by design, for a portfolio-scoped build)
 
-- Push notifications are Realtime-driven local notifications only — no true
-  background push (documented trade-off from dropping Firebase/FCM).
+- True background push requires configuring FCM service-account credentials
+  on the backend (see `.env.example`); without them, notifications are
+  in-app only (Supabase Realtime inbox).
 - RLS policies are simplified, not production-hardened multi-tenant rules.
-- No ratings/reviews, delivery ETA, or courier-proximity job sorting yet.
+- Courier payouts are recorded as an earnings ledger, not yet transferred to
+  courier bank accounts (vendors do get real Stripe Connect transfers).

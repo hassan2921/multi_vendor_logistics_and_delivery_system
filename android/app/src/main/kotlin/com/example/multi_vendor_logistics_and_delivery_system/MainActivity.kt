@@ -1,5 +1,5 @@
 package com.example.multi_vendor_logistics_and_delivery_system
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+class MainActivity : FlutterFragmentActivity()

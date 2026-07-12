@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/user_role.dart';
+import '../features/admin/admin_dashboard_screen.dart';
 import '../features/courier/available_jobs_screen.dart';
 import '../features/customer/vendor_list_screen.dart';
 import '../features/vendor/incoming_orders_screen.dart';
@@ -32,6 +33,8 @@ class AuthGate extends ConsumerWidget {
             return const AvailableJobsScreen();
           case UserRole.vendor:
             return const _VendorGate();
+          case UserRole.admin:
+            return const AdminDashboardScreen();
         }
       },
     );

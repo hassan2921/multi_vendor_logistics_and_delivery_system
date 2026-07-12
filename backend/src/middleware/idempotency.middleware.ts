@@ -16,10 +16,15 @@ import {
  */
 export function requireIdempotencyKey() {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const key = req.header('Idempotency-Key');
-    if (!key) {
+    const clientKey = req.header('Idempotency-Key');
+    if (!clientKey) {
       return res.status(400).json({ error: 'Idempotency-Key header is required' });
     }
+
+    // Namespace per user: without this, two users sending the same key would
+    // share one record — the second could be served the first's cached
+    // response (someone else's order, address and all) or a spurious 409.
+    const key = `${req.authUser?.id ?? 'anon'}:${clientKey}`;
 
     const requestHash = hashRequest(req.method, req.path, req.body);
 

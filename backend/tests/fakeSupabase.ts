@@ -10,6 +10,9 @@ const UNIQUE_COLUMNS: Record<string, string[]> = {
   idempotency_keys: ['key'],
   stripe_events_seen: ['event_id'],
   vendors: ['owner_user_id'],
+  reviews: ['order_id'],
+  promo_codes: ['code'],
+  device_tokens: ['token'],
 };
 
 class FakeQueryBuilder {
@@ -57,6 +60,25 @@ class FakeQueryBuilder {
 
   in(col: string, vals: unknown[]) {
     this.filters.push({ col, val: vals, matcher: (rowVal, v) => (v as unknown[]).includes(rowVal) });
+    return this;
+  }
+
+  gte(col: string, val: unknown) {
+    this.filters.push({
+      col,
+      val,
+      matcher: (rowVal, v) => rowVal != null && (rowVal as number) >= (v as number),
+    });
+    return this;
+  }
+
+  ilike(col: string, pattern: string) {
+    const needle = pattern.replace(/%/g, '').toLowerCase();
+    this.filters.push({
+      col,
+      val: pattern,
+      matcher: (rowVal) => typeof rowVal === 'string' && rowVal.toLowerCase().includes(needle),
+    });
     return this;
   }
 
@@ -171,6 +193,24 @@ export class FakeSupabaseClient {
 
   from(table: string) {
     return new FakeQueryBuilder(table, this.store);
+  }
+
+  // Mirrors the adjust_stock SQL function from migration 0004: a single
+  // conditional update that fails (returns null) on insufficient stock and
+  // no-ops on untracked products.
+  async rpc(fn: string, args: Record<string, unknown>) {
+    if (fn !== 'adjust_stock') {
+      return { data: null, error: { message: `unknown function ${fn}` } };
+    }
+    const products = this.store.get('products') ?? [];
+    const product = products.find((p) => p.id === args.p_product_id);
+    const stock = (product?.stock_quantity ?? null) as number | null;
+    const delta = args.p_delta as number;
+    if (!product || stock === null || stock + delta < 0) {
+      return { data: null, error: null };
+    }
+    product.stock_quantity = stock + delta;
+    return { data: true, error: null };
   }
 
   reset() {

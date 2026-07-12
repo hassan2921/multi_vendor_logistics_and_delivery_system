@@ -25,6 +25,44 @@ describe('vendors service', () => {
       expect(second.id).toBe(first.id);
       expect(second.name).toBe('Pizza Place');
     });
+
+    it('stores the cover photo URL when provided', async () => {
+      const vendor = await vendorsService.createOrGetVendorForOwner('owner-1', {
+        name: 'Pizza Place',
+        imageUrl: 'https://cdn.example.com/pizza.jpg',
+      });
+      expect(vendor.image_url).toBe('https://cdn.example.com/pizza.jpg');
+    });
+  });
+
+  describe('storefront profile updates', () => {
+    it('updates name and cover photo', async () => {
+      const vendor = await vendorsService.createOrGetVendorForOwner('owner-1', { name: 'Pizza Place' });
+
+      const updated = await vendorsService.updateVendorProfile(vendor.id, {
+        name: 'Pizza Palace',
+        imageUrl: 'https://cdn.example.com/palace.jpg',
+      });
+
+      expect(updated.name).toBe('Pizza Palace');
+      expect(updated.image_url).toBe('https://cdn.example.com/palace.jpg');
+    });
+
+    it('clears the cover photo when imageUrl is null', async () => {
+      const vendor = await vendorsService.createOrGetVendorForOwner('owner-1', {
+        name: 'Pizza Place',
+        imageUrl: 'https://cdn.example.com/pizza.jpg',
+      });
+
+      const updated = await vendorsService.updateVendorProfile(vendor.id, { imageUrl: null });
+      expect(updated.image_url).toBeNull();
+    });
+
+    it('404s for a vendor id that does not exist', async () => {
+      await expect(
+        vendorsService.updateVendorProfile('missing-vendor', { name: 'Ghost' })
+      ).rejects.toMatchObject({ status: 404 });
+    });
   });
 
   describe('product management', () => {

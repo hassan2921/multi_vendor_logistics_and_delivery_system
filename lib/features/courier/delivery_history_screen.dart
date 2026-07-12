@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/auth_provider.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/ui/formatting.dart';
+import '../../core/widgets/async_views.dart';
+import '../../core/widgets/status_badge.dart';
 import '../../data/models/order.dart';
 import 'active_delivery_screen.dart';
 
@@ -22,31 +26,86 @@ class DeliveryHistoryScreen extends ConsumerWidget {
         ],
       ),
       body: ordersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Failed to load deliveries: $err')),
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
+        loading: () => const AppListSkeleton(),
+        error: (err, _) => AppErrorView(error: err, onRetry: () => ref.invalidate(myDeliveriesProvider)),
         data: (orders) {
           if (orders.isEmpty) {
-            return const Center(child: Text("You haven't claimed any deliveries yet."));
+            return const AppEmptyState(
+              icon: Icons.local_shipping_outlined,
+              title: 'No deliveries yet',
+              subtitle: "You haven't claimed any deliveries yet.",
+            );
           }
-          return ListView.builder(
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
             itemCount: orders.length,
-            itemBuilder: (context, index) {
-              final order = orders[index];
-              final isActive = order.status != OrderStatus.delivered && order.status != OrderStatus.cancelled;
-              return ListTile(
-                leading: Icon(isActive ? Icons.local_shipping : Icons.check_circle_outline),
-                title: Text('Order ${order.id.substring(0, 8)}'),
-                subtitle: Text(order.status.label),
-                trailing: Text('\$${(order.totalCents / 100).toStringAsFixed(2)}'),
-                onTap: isActive
-                    ? () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(order: order)),
-                        )
-                    : null,
-              );
-            },
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, index) => _DeliveryCard(order: orders[index]),
           );
         },
+      ),
+    );
+  }
+}
+
+class _DeliveryCard extends StatelessWidget {
+  const _DeliveryCard({required this.order});
+
+  final DeliveryOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isActive = order.status != OrderStatus.delivered && order.status != OrderStatus.cancelled;
+    final style = orderStatusStyle(order.status);
+
+    return Card(
+      child: InkWell(
+        onTap: isActive
+            ? () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(order: order)),
+                )
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: style.color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(style.icon, color: style.color, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Order #${shortOrderId(order.id)}',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    StatusBadge(order.status, compact: true),
+                  ],
+                ),
+              ),
+              Text(
+                formatMoney(order.totalCents),
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              if (isActive) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded, color: theme.colorScheme.onSurfaceVariant),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

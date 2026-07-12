@@ -1,6 +1,8 @@
 import '../../core/api_client.dart';
 import '../../core/supabase_client.dart';
 import '../models/order.dart';
+import '../models/order_quote.dart';
+import '../models/review.dart';
 
 class OrdersRepository {
   const OrdersRepository(this._api);
@@ -20,6 +22,8 @@ class OrdersRepository {
     String? deliveryAddress,
     double? deliveryLat,
     double? deliveryLng,
+    int? tipCents,
+    String? promoCode,
   }) async {
     final res = await _api.post(
       '/orders',
@@ -29,10 +33,42 @@ class OrdersRepository {
         'deliveryAddress': ?deliveryAddress,
         'deliveryLat': ?deliveryLat,
         'deliveryLng': ?deliveryLng,
+        'tipCents': ?tipCents,
+        'promoCode': ?promoCode,
       },
       idempotencyKey: idempotencyKey,
     );
     return DeliveryOrder.fromJson(res['order'] as Map<String, dynamic>);
+  }
+
+  /// Server-side price preview (fees, discount, ETA). The checkout screen
+  /// re-quotes whenever the tip or promo code changes, so what the customer
+  /// sees is exactly what createOrder will charge.
+  Future<OrderQuote> quote({
+    required String vendorId,
+    required List<OrderItem> items,
+    double? deliveryLat,
+    double? deliveryLng,
+    int? tipCents,
+    String? promoCode,
+  }) async {
+    final res = await _api.post('/orders/quote', {
+      'vendorId': vendorId,
+      'items': items.map((i) => i.toJson()).toList(),
+      'deliveryLat': ?deliveryLat,
+      'deliveryLng': ?deliveryLng,
+      'tipCents': ?tipCents,
+      'promoCode': ?promoCode,
+    });
+    return OrderQuote.fromJson(res['quote'] as Map<String, dynamic>);
+  }
+
+  Future<Review> submitReview(String orderId, {required int rating, String? comment}) async {
+    final res = await _api.post('/orders/$orderId/review', {
+      'rating': rating,
+      'comment': ?comment,
+    });
+    return Review.fromJson(res['review'] as Map<String, dynamic>);
   }
 
   Future<DeliveryOrder> updateStatus(String orderId, OrderStatus status) async {

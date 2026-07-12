@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as reviewsController from '../controllers/reviews.controller';
 import * as vendorsController from '../controllers/vendors.controller';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { requireIdempotencyKey } from '../middleware/idempotency.middleware';
@@ -18,6 +19,12 @@ vendorsRouter.post(
   asyncHandler(vendorsController.onboard)
 );
 vendorsRouter.get('/me', requireAuth(), requireRole('vendor'), asyncHandler(vendorsController.getMyVendor));
+vendorsRouter.patch(
+  '/me',
+  requireAuth(),
+  requireRole('vendor'),
+  asyncHandler(vendorsController.updateMyVendor)
+);
 vendorsRouter.get(
   '/me/orders',
   requireAuth(),
@@ -43,5 +50,20 @@ vendorsRouter.patch(
   asyncHandler(vendorsController.updateProduct)
 );
 
+// Stripe Connect payout onboarding.
+vendorsRouter.post(
+  '/me/connect/onboard',
+  requireAuth(),
+  requireRole('vendor'),
+  asyncHandler(vendorsController.createConnectOnboardingLink)
+);
+vendorsRouter.get(
+  '/me/connect/status',
+  requireAuth(),
+  requireRole('vendor'),
+  asyncHandler(vendorsController.getConnectStatus)
+);
+
 // Public menu browsing for customers.
 vendorsRouter.get('/:vendorId/products', asyncHandler(vendorsController.listProducts));
+vendorsRouter.get('/:vendorId/reviews', asyncHandler(reviewsController.listVendorReviews));

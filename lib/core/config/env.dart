@@ -12,7 +12,4 @@ class Env {
 
   static String get stripePublishableKey =>
       dotenv.get('STRIPE_PUBLISHABLE_KEY', fallback: 'PLACEHOLDER_pk_test');
-
-  static String get googleMapsApiKey =>
-      dotenv.get('GOOGLE_MAPS_API_KEY', fallback: 'PLACEHOLDER_MAPS_KEY');
 }

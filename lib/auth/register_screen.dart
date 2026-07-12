@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 
 import '../core/config/env.dart';
 import '../core/supabase_client.dart';
+import '../core/ui/formatting.dart';
+import '../core/widgets/async_views.dart';
+import '../core/widgets/brand_header.dart';
 import '../data/models/user_role.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -20,7 +23,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _fullNameController = TextEditingController();
   UserRole _role = UserRole.customer;
   bool _isSubmitting = false;
-  String? _error;
+  bool _obscurePassword = true;
+  Object? _error;
 
   Future<void> _register() async {
     setState(() {
@@ -54,7 +58,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -71,52 +75,97 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _fullNameController,
-              decoration: const InputDecoration(labelText: 'Full name'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<UserRole>(
-              initialValue: _role,
-              decoration: const InputDecoration(labelText: 'I am a...'),
-              items: const [
-                DropdownMenuItem(value: UserRole.customer, child: Text('Customer')),
-                DropdownMenuItem(value: UserRole.courier, child: Text('Courier')),
-                DropdownMenuItem(value: UserRole.vendor, child: Text('Vendor')),
-              ],
-              onChanged: (value) => setState(() => _role = value ?? UserRole.customer),
-            ),
-            const SizedBox(height: 20),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      appBar: AppBar(),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                children: [
+                  const BrandHeader(subtitle: 'Create your account to get started'),
+                  const SizedBox(height: 28),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextField(
+                            controller: _fullNameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Full name',
+                              prefixIcon: Icon(Icons.person_outline_rounded),
+                            ),
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _emailController,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              prefixIcon: Icon(Icons.mail_outline_rounded),
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _passwordController,
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: const Icon(Icons.lock_outline_rounded),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined),
+                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                              ),
+                            ),
+                            obscureText: _obscurePassword,
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'I want to join as',
+                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          SegmentedButton<UserRole>(
+                            showSelectedIcon: false,
+                            segments: const [
+                              ButtonSegment(value: UserRole.customer, label: Text('Customer')),
+                              ButtonSegment(value: UserRole.courier, label: Text('Courier')),
+                              ButtonSegment(value: UserRole.vendor, label: Text('Vendor')),
+                            ],
+                            selected: {_role},
+                            onSelectionChanged: (s) => setState(() => _role = s.first),
+                          ),
+                          if (_error != null) ...[
+                            const SizedBox(height: 16),
+                            InlineError(friendlyError(_error!)),
+                          ],
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: _isSubmitting ? null : _register,
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                                  )
+                                : const Text('Create account'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            FilledButton(
-              onPressed: _isSubmitting ? null : _register,
-              child: _isSubmitting
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Register'),
             ),
-          ],
+          ),
         ),
       ),
     );

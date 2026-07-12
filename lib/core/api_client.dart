@@ -51,6 +51,11 @@ class ApiClient {
     return _decode(res);
   }
 
+  Future<void> delete(String path) async {
+    final res = await http.delete(_uri(path), headers: _headers());
+    _decode(res);
+  }
+
   Map<String, dynamic> _decode(http.Response res) {
     final body = res.body.isEmpty ? <String, dynamic>{} : jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400) {

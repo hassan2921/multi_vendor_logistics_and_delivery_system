@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../auth/auth_provider.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/ui/formatting.dart';
+import '../../core/widgets/async_views.dart';
+import '../../core/widgets/status_badge.dart';
 import '../../data/models/order.dart';
 import 'location_service.dart';
 
@@ -60,8 +64,15 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> wit
   }
 
   Future<void> _advanceStatus(OrderStatus next) async {
-    final updated = await ref.read(ordersRepositoryProvider).updateStatus(widget.order.id, next);
-    setState(() => _status = updated.status);
+    try {
+      final updated = await ref.read(ordersRepositoryProvider).updateStatus(widget.order.id, next);
+      setState(() {
+        _status = updated.status;
+        _error = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyError(e));
+    }
   }
 
   @override
@@ -71,47 +82,146 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> wit
     super.dispose();
   }
 
+  /// The courier's next action for the current status, if any.
+  (OrderStatus, String)? get _nextAction {
+    switch (_status) {
+      case OrderStatus.courierAssigned:
+        return (OrderStatus.pickedUp, 'Mark picked up');
+      case OrderStatus.pickedUp:
+        return (OrderStatus.inTransit, 'Start delivering');
+      case OrderStatus.inTransit:
+        return (OrderStatus.delivered, 'Mark delivered');
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final next = _nextAction;
+
     return Scaffold(
-      appBar: AppBar(title: Text('Order ${widget.order.id.substring(0, 8)}')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Status: ${_status.label}', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 24),
-            if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            if (!_isSharingLocation)
-              FilledButton.icon(
-                onPressed: _startSharingLocation,
-                icon: const Icon(Icons.my_location),
-                label: const Text('Start sharing my location'),
-              )
-            else
-              const ListTile(
-                leading: Icon(Icons.location_on, color: Colors.green),
-                title: Text('Sharing location'),
-                subtitle: Text('Batched every 10s or 5 points, whichever comes first'),
-              ),
-            const SizedBox(height: 24),
-            if (_status == OrderStatus.courierAssigned)
-              OutlinedButton(
-                onPressed: () => _advanceStatus(OrderStatus.pickedUp),
-                child: const Text('Mark picked up'),
-              ),
-            if (_status == OrderStatus.pickedUp)
-              OutlinedButton(
-                onPressed: () => _advanceStatus(OrderStatus.inTransit),
-                child: const Text('Start delivering'),
-              ),
-            if (_status == OrderStatus.inTransit)
-              FilledButton(
-                onPressed: () => _advanceStatus(OrderStatus.delivered),
-                child: const Text('Mark delivered'),
-              ),
-          ],
+      appBar: AppBar(title: Text('Order #${shortOrderId(widget.order.id)}')),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        StatusBadge(_status),
+                        if (widget.order.deliveryAddress != null) ...[
+                          const Divider(height: 24),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.location_on_outlined,
+                                  size: 20, color: theme.colorScheme.onSurfaceVariant),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Deliver to',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                                    const SizedBox(height: 2),
+                                    Text(widget.order.deliveryAddress!, style: theme.textTheme.bodyLarge),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_error != null) ...[
+                  InlineError(_error!),
+                  const SizedBox(height: 16),
+                ],
+                if (!_isSharingLocation)
+                  FilledButton.icon(
+                    onPressed: _startSharingLocation,
+                    icon: const Icon(Icons.my_location),
+                    label: const Text('Start sharing my location'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.colorScheme.secondaryContainer,
+                      foregroundColor: theme.colorScheme.onSecondaryContainer,
+                    ),
+                  )
+                else
+                  Card(
+                    child: ListTile(
+                      leading: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.14),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.location_on_rounded, color: AppColors.success),
+                      ),
+                      title: const Text('Sharing location'),
+                      subtitle: const Text('Batched every 10s or 5 points, whichever comes first'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          _ActionBar(next: next, onAdvance: _advanceStatus),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({required this.next, required this.onAdvance});
+
+  final (OrderStatus, String)? next;
+  final ValueChanged<OrderStatus> onAdvance;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: next == null
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.check_circle_rounded, size: 20, color: AppColors.success),
+                    const SizedBox(width: 8),
+                    Text('Delivery complete',
+                        style: theme.textTheme.titleMedium?.copyWith(color: AppColors.success)),
+                  ],
+                )
+              : FilledButton(
+                  onPressed: () => onAdvance(next!.$1),
+                  child: Text(next!.$2),
+                ),
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as ordersController from '../controllers/orders.controller';
+import * as reviewsController from '../controllers/reviews.controller';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { requireIdempotencyKey } from '../middleware/idempotency.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -12,6 +13,9 @@ ordersRouter.post(
   requireIdempotencyKey(),
   asyncHandler(ordersController.createOrder)
 );
+
+// Price preview — read-only, so no idempotency key needed.
+ordersRouter.post('/quote', requireAuth(), asyncHandler(ordersController.quoteOrder));
 
 // Must come before /:id so "mine" isn't parsed as an order id.
 ordersRouter.get('/mine', requireAuth(), asyncHandler(ordersController.listMine));
@@ -37,4 +41,11 @@ ordersRouter.post(
   requireAuth(),
   requireRole('customer', 'vendor'),
   asyncHandler(ordersController.cancelOrder)
+);
+
+ordersRouter.post(
+  '/:id/review',
+  requireAuth(),
+  requireRole('customer'),
+  asyncHandler(reviewsController.createReview)
 );

@@ -111,10 +111,44 @@ describe('idempotency middleware', () => {
 
     // Simulate a genuine in-flight duplicate: claim the key directly (as
     // the first request's middleware would) without ever completing it,
-    // then send a second request with the same key.
-    await claimIdempotencyKey(key, hashRequest('POST', '/widgets', { name: 'a' }));
+    // then send a second request with the same key. The middleware
+    // namespaces keys per user ('anon' when unauthenticated).
+    await claimIdempotencyKey(`anon:${key}`, hashRequest('POST', '/widgets', { name: 'a' }));
 
     const res = await request(app).post('/widgets').set('Idempotency-Key', key).send({ name: 'a' });
     expect(res.status).toBe(409);
+  });
+
+  it('scopes keys per user — another user reusing the same key never sees the cached response', async () => {
+    const app = express();
+    app.use(express.json());
+
+    let callCount = 0;
+    // Simulated auth: the test picks who is calling via the X-Test-User header.
+    app.post(
+      '/widgets',
+      (req, _res, next) => {
+        req.authUser = { id: req.header('X-Test-User')! } as NonNullable<typeof req.authUser>;
+        next();
+      },
+      requireIdempotencyKey(),
+      (_req, res) => {
+        callCount += 1;
+        res.status(201).json({ createdCount: callCount });
+      }
+    );
+    app.use(errorHandler);
+
+    const key = 'shared-key';
+    const first = await request(app)
+      .post('/widgets').set('Idempotency-Key', key).set('X-Test-User', 'user-A').send({ name: 'a' });
+    expect(first.body.createdCount).toBe(1);
+
+    // Identical key AND payload, but a different user: must run the handler
+    // again, not replay user A's cached response.
+    const second = await request(app)
+      .post('/widgets').set('Idempotency-Key', key).set('X-Test-User', 'user-B').send({ name: 'a' });
+    expect(second.status).toBe(201);
+    expect(second.body.createdCount).toBe(2);
   });
 });
