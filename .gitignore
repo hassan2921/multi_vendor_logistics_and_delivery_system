@@ -51,3 +51,9 @@ backend/.env
 # Node backend
 backend/node_modules/
 backend/dist/
+
+# Root node tooling (supabase CLI)
+node_modules/
+
+# Local screenshots
+portfolio_screenshots/
