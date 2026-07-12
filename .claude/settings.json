@@ -66,7 +66,9 @@
       "Bash(psql postgresql://postgres:postgres@127.0.0.1:55432/postgres -c \"select id, status, total_cents, created_at from public.orders where status not in \\('delivered','cancelled','awaiting_payment','paid'\\) order by created_at desc limit 10;\")",
       "Bash(psql postgresql://postgres:postgres@127.0.0.1:55432/postgres -c \"select status, count\\(*\\) from public.orders group by 1;\" -c \"select id, status, created_at from public.orders where status in \\('in_transit','picked_up','out_for_delivery'\\) order by created_at desc limit 5;\")",
       "Bash(psql postgresql://postgres:postgres@127.0.0.1:55432/postgres -c \"select o.id, o.status, o.created_at, u.email from public.orders o join public.users u on u.id=o.customer_id where o.status='in_transit';\" -c \"select count\\(*\\), max\\(recorded_at\\) from public.location_pings;\")",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

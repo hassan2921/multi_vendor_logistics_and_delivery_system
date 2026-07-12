@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Allows plaintext HTTP only to localhost, so `adb reverse tcp:3000
+     tcp:3000` can reach the local dev backend (API_BASE_URL=http://
+     localhost:3000 in .env) from a real device over USB. Everything else
+     stays on Android's default HTTPS-only behavior.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
